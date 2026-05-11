@@ -108,6 +108,7 @@ services:
       - "127.0.0.1:8888:8888"  # collector self-metrics
     volumes:
       - ./03-tracing-and-logs/otel-collector/otel-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     depends_on:
       - jaeger

@@ -9,6 +9,25 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  # Docker container logs for day23-app → Loki
+  filelog:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    include_file_path: true
+    operators:
+      - type: json_parser
+        id: parse-docker
+        parse_from: body
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      - type: move
+        from: attributes.log
+        to: body
+      - type: add
+        field: resource["service.name"]
+        value: inference-api
+
   # Self-metrics (Prometheus-scrapeable on :8888 — see prometheus.yml)
   prometheus:
     config:
@@ -23,9 +42,9 @@ processors:
     send_batch_size: 1024
     timeout: 5s
 
-  # Composite tail-sampling: keep all errors + slow + 1% healthy
+  # Composite tail-sampling: keep all errors + slow + 100% healthy (lab mode)
   tail_sampling:
-    decision_wait: 30s
+    decision_wait: 5s
     num_traces: 50000
     expected_new_traces_per_sec: 100
     policies:
@@ -35,9 +54,9 @@ processors:
       - name: keep-slow
         type: latency
         latency: { threshold_ms: 2000 }
-      - name: probabilistic-1pct
+      - name: probabilistic-100pct
         type: probabilistic
-        probabilistic: { sampling_percentage: 1 }
+        probabilistic: { sampling_percentage: 100 }
 
   # Add deployment env to every span/metric resource attribute
   resource:
@@ -53,23 +72,35 @@ exporters:
     tls:
       insecure: true
 
+  # Logs → Loki
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+
   debug:
-    verbosity: basic
+    verbosity: detailed
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [tail_sampling, resource, batch]
-      exporters: [otlp/jaeger]
+      processors: [resource, batch]
+      exporters: [otlp/jaeger, debug]
 
     metrics:
       receivers: [otlp, prometheus]
       processors: [resource, batch]
       exporters: [debug]
 
+    logs:
+      receivers: [filelog]
+      processors: [resource, batch]
+      exporters: [loki]
+
   telemetry:
     logs:
-      level: warn
+      level: info
     metrics:
       address: 0.0.0.0:8888

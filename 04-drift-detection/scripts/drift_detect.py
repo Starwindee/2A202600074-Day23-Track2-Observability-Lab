@@ -104,8 +104,8 @@ def main() -> int:
         html_path = REPORTS_DIR / "drift-report.html"
         report.save_html(str(html_path))
         print(f"Wrote: {html_path}")
-    except ImportError:
-        print("evidently not installed; skipping HTML report. Install with: pip install evidently")
+    except Exception as e:
+        print(f"evidently HTML report skipped: {e}. Install with: pip install evidently")
     return 0
 
 
